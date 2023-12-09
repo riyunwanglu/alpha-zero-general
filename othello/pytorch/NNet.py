@@ -19,10 +19,16 @@ args = dotdict({
     'dropout': 0.3,
     'epochs': 10,
     'batch_size': 64,
-    'cuda': torch.cuda.is_available(),
     'num_channels': 512,
 })
 
+device = (
+    "cuda"
+    if torch.cuda.is_available()
+    else "mps"
+    if torch.backends.mps.is_available()
+    else "cpu"
+)
 
 class NNetWrapper(NeuralNet):
     def __init__(self, game):
@@ -30,8 +36,7 @@ class NNetWrapper(NeuralNet):
         self.board_x, self.board_y = game.getBoardSize()
         self.action_size = game.getActionSize()
 
-        if args.cuda:
-            self.nnet.cuda()
+        self.nnet.to(device)
 
     def train(self, examples):
         """
@@ -56,8 +61,7 @@ class NNetWrapper(NeuralNet):
                 target_vs = torch.FloatTensor(np.array(vs).astype(np.float64))
 
                 # predict
-                if args.cuda:
-                    boards, target_pis, target_vs = boards.contiguous().cuda(), target_pis.contiguous().cuda(), target_vs.contiguous().cuda()
+                boards, target_pis, target_vs = boards.contiguous().to(device), target_pis.contiguous().to(device), target_vs.contiguous().to(device)
 
                 # compute output
                 out_pi, out_v = self.nnet(boards)
@@ -84,7 +88,7 @@ class NNetWrapper(NeuralNet):
 
         # preparing input
         board = torch.FloatTensor(board.astype(np.float64))
-        if args.cuda: board = board.contiguous().cuda()
+        board = board.contiguous().to(device)
         board = board.view(1, self.board_x, self.board_y)
         self.nnet.eval()
         with torch.no_grad():
@@ -115,6 +119,5 @@ class NNetWrapper(NeuralNet):
         filepath = os.path.join(folder, filename)
         if not os.path.exists(filepath):
             raise ("No model in path {}".format(filepath))
-        map_location = None if args.cuda else 'cpu'
-        checkpoint = torch.load(filepath, map_location=map_location)
+        checkpoint = torch.load(filepath)
         self.nnet.load_state_dict(checkpoint['state_dict'])
